@@ -1,0 +1,29 @@
+\documentclass[11pt]{article}
+\usepackage{geometry}                % See geometry.pdf to learn the layout options. There are lots.
+\geometry{letterpaper}                   % ... or a4paper or a5paper or ... 
+\usepackage{graphicx}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{subfig}
+\usepackage{epstopdf}
+\usepackage{bbm}
+\usepackage{algpseudocode}
+\usepackage{algorithm}
+\DeclareGraphicsRule{.tif}{png}{.png}{`convert #1 `dirname #1`/`basename #1 .tif`.png}
+\newcommand{\R}{\mathbf{R}}
+\newcommand{\mb}[1]{\mathbf{#1}}
+
+\title{CS 228T: HW 1}
+\author{Marco Cusumano-Towner}
+
+\begin{document}
+
+\maketitle
+
+\section{Stochastic gradient descent (SGD) for logistic regression}
+We are using a spherical Gaussian prior for the weights (mean $\mb{0}$, covariance matrix $(1/\lambda)I$). We are seeking the MAP estimate for the weights $\mb{w}$:
+\[ \max_{\mb{w}} P(\mb{x}_1,\ldots,\mb{x}_m,y_1,\ldots,y_m; \mb{w}) = \max_{\mb{w}} P(\mb{x}_1,\ldots,\mb{x}_m,y_1,\ldots,y_m | \mb{w}) P(\mb{w})\]
+Taking log, this objective equivalent to
+\[\log P(\mb{w}) + \sum_{i=1}^m y_i \log \sigma(b + \sum_{j=1}^n w_j \mb{x}^{(i)}_j ) + (1-y_i) \log () \]
+
+\end{document}
