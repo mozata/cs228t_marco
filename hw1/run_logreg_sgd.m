@@ -1,26 +1,20 @@
 clear; close all;
 
 load('data/stocip-matlab/spamassassin.mat','A','y');
-A = A(1:10000,:);
+m = size(A,2);
+new_order = randperm(m);
+A = A(1:10000,new_order);
+y = y(new_order);
+% randomize data order
+n = size(A,1);
 
-% choose lambda, eta hyperparameters (this seems illegal)
-lambdas = 10.^(-1:0.5:1);
-etas = 10.^(-5:1:-1);
-acc = zeros(length(lambdas),length(etas));
-for i=1:length(lambdas)
-    for j=1:length(etas)
-        [w,p] = logreg_sgd(y,A,lambdas(i),etas(j));
-        acc(i,j) = sum( y == (p > 0.5));
-   end
-end
-[junk,idx] = max(acc(:));
-[lambda_idx,eta_idx] = ind2sub(size(acc),idx);
-lambda = lambdas(lambda_idx);
-eta = etas(eta_idx);
+lambda = 0.1;
+eta = 0.0001;
 
+sig = @(z)(1./(1+exp(-z)));
+
+% *** SGD one-step-ahead predictive performance (confusion matrix) ***
 [w,p] = logreg_sgd(y,A,lambda,eta);
-
-% confusion matrix
 t = 0.5;
 a = sum(y == 0 & p <= t);
 b  = sum(y == 1 & p <= t);
@@ -28,36 +22,116 @@ c = sum(y == 0 & p > t);
 d = sum(y == 1 & p > t);
 disp([a b; c d]);
 
-save('data/logreg_sgd.mat','w','p','lambda','eta');
+% *** ADF one-step-ahead predictive performance (confusion matrix) ***
+[mu,var,padf] = logreg_adf(y,A,lambda,100);
+t = 0.5;
+a = sum(y == 0 & padf <= t);
+b  = sum(y == 1 & padf <= t);
+c = sum(y == 0 & padf > t);
+d = sum(y == 1 & padf > t);
+disp([a b; c d]);
 
-% 3) treat first 3000 cases as training data, remaining 3034 as
-% test data
-trainsets = [100, 1000, 3000];
-Atest = A(:,3001:end);
-ytest = y(3001:end);
-ntest = size(Atest,2)
-ptest = cell(3,1);
-sig = @(z)(1./(1+exp(-z)));
-for k=1:3
-    Atrain = A(:,1:trainsets(k));
-    w = logreg_sgd(y(1:trainsets(k)),Atrain,lambda,eta);
-    ptest{k} = sig(w'*[ones(1,size(Atest,2)); Atest] )';
-end
+% *** get SGD and ADF ROC curves for different training sets ***
+trainsets = [100,1000,3000];
+p_sgd = cell(3,1);
+p_adf = cell(3,1);
+p_adf_var = cell(3,1);
 
-% ROC curves
-figure;
-ts = 0:0.01:1;
-for k=1:3
-    subplot(1,3,k);
+ytest = y(3001:m);
+Atest = A(:,3001:m);
+ntest = length(ytest);
+
+for i=1:3
+    
+    ytrain = y(1:trainsets(i));
+    Atrain = A(:,1:trainsets(i));
+
+    % SGD: get weight point estimate from SGD after 100,1000,3000 train samples
+    % get posterior probabilities from point weight estimate
+    w = logreg_sgd(ytrain,Atrain,lambda,eta);
+    p_sgd{i} = sig([ones(1,ntest); Atest]'*w );
+
+    % generate ROC curves for SGD
+    figure(1);
+    ts = 0:0.001:1;
+    subplot(1,3,i);
+    title(['SGD ROC curve ntrain=',int2str(length(ytrain))]);
     tpr = zeros(length(ts),1);
     fpr = zeros(length(ts),1);
-    for i=1:length(ts)
-        t = ts(i);
-        ypred = ptest{k} > t;
-        tpr(i) = sum(and(ytest == 1, ypred == 1))/sum(ytest == 1);
-        fpr(i) = sum(and(ytest == 0, ypred == 0))/sum(ytest == 0);
+    for j=1:length(ts)
+        ypred = p_sgd{i} > ts(j);
+        tpr(j) = sum(and(ytest == 1, ypred == 1))/sum(ytest == 1);
+        fpr(j) = sum(and(ytest == 0, ypred == 0))/sum(ytest == 0);
+    end
+    plot(fpr,tpr); 
+
+
+    % ADF: get weight posteriors after 100,1000,3000 train samples
+    % weight posteriors: mu, var
+    [mu,var] = logreg_adf(ytrain,Atrain,lambda);
+
+    % sample from weight posterior to approximate P(y_i | x_i, data) for test i
+    % (as in KM 8.4.4.1)
+    p_adf{i} = zeros(ntest,1);
+    p_adf_var{i} = zeros(ntest,1);
+    S = 1000; % number of samples
+    samp = normrnd(repmat(mu,1,S),repmat(sqrt(var),1,S)); % samp is N x S
+    for j=1:ntest % test set
+        p_adf{i}(j) = (1/S)*sum(sig(samp'*[1; Atest(:,j)])); % mu = p
+        p_adf_var{i}(j) = p_adf{i}(j)*(1-p_adf{i}(j)); % var = p(1-p)
+    end
+
+    % generate ROC curves for ADF
+    figure(2);
+    ts = 0:0.001:1;
+    subplot(1,3,i);
+    title(['ADF ROC curve ntrain=',int2str(length(ytrain))]);
+    tpr = zeros(length(ts),1);
+    fpr = zeros(length(ts),1);
+    for j=1:length(ts)
+        ypred = p_adf{i} > ts(j);
+        tpr(j) = sum(and(ytest == 1, ypred == 1))/sum(ytest == 1);
+        fpr(j) = sum(and(ytest == 0, ypred == 0))/sum(ytest == 0);
     end
     plot(fpr,tpr);
+
+    % ADF: plots with error bars on estimate
+    figure(4);
+
+    % D_0
+    subplot(2,3,i);
+    [p_adf_sorted,sorted_order] = sort(p_adf{i}(ytest == 0),'descend');
+    tmp = p_adf_var{i}(ytest == 0);
+    p_adf_var_sorted = tmp(sorted_order);
+    errorbar(1:length(p_adf_sorted),p_adf_sorted,sqrt(p_adf_var_sorted));
+    title(['D_0, ntrain=',int2str(length(ytrain))]);
+    
+    % D_1
+    subplot(2,3,i+3);
+    [p_adf_sorted,sorted_order] = sort(p_adf{i}(ytest == 1)','descend');
+    tmp = p_adf_var{i}(ytest == 1);
+    p_adf_var_sorted = tmp(sorted_order);
+    errorbar(1:length(p_adf_sorted),p_adf_sorted,sqrt(p_adf_var_sorted));
+    title(['D_1, ntrain=',int2str(length(ytrain))]);
+
 end
 
-% compare to batch 
+% get batch ROC curve (training on 3000 samples)
+[model, X, lambdaVec, opt] = logregFit(A(:,1:3000)', y(1:3000), 'regType', 'l2','lambda',lambda);
+[y_hat, p_batch] = logregPredict(model, Atest');
+figure(3);
+ts = 0:0.001:1;
+subplot(1,3,i);
+tpr = zeros(length(ts),1);
+fpr = zeros(length(ts),1);
+for j=1:length(ts)
+    ypred = p_batch > ts(j);
+    tpr(j) = sum(and(ytest == 1, ypred == 1))/sum(ytest == 1);
+    fpr(j) = sum(and(ytest == 0, ypred == 0))/sum(ytest == 0);
+end
+plot(fpr,tpr);
+
+
+% P(weight | training data) <---- distribution
+% P(y_i | training data, x_i) = integral_over_w P(y_i | weight, x_i) P(weight | train)
+% take 100 samples of w, then compute P(y_i | w, x_i) (probability)
