@@ -1,0 +1,61 @@
+\documentclass[11pt]{article}
+\usepackage{geometry}                % See geometry.pdf to learn the layout options. There are lots.
+\geometry{letterpaper}                   % ... or a4paper or a5paper or ... 
+\usepackage{graphicx}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{subfig}
+\usepackage{epstopdf}
+\usepackage{bbm}
+\usepackage{algpseudocode}
+\usepackage{algorithm}
+\usepackage{float}
+\DeclareGraphicsRule{.tif}{png}{.png}{`convert #1 `dirname #1`/`basename #1 .tif`.png}
+\newcommand{\R}{\mathbf{R}}
+\newcommand{\KL}[2]{\mathbb{KL}\left(#1||#2\right)}
+\newcommand{\mb}[1]{\mathbf{#1}}
+
+\title{EM Algorithm Examples}
+\author{Marco Cusumano-Towner}
+
+\begin{document}
+
+\section{Introduction to EM}
+Consider a distribution $P(X | \Theta)$ parameterized by $\Theta$,
+where $X$ are data variables that are observed. Given data $X$, we
+want to find model parameters that agree with the data. In the
+maximum-likelihood framework, these are
+\[ \Theta^{ML} = \mbox{argmax}_{\Theta} P(X | \Theta) \]
+If our model has latent variables $Z$ that are not observed, and the joint distribution is $P(X,Z|\Theta)$, then the ML task is:
+\[ \Theta^{ML} = \mbox{argmax}_{\Theta} \sum_Z P(X,Z | \Theta) \]
+In general this is difficult to optimize. One could try gradient
+ascent, but EM is an effective alternative.
+
+If we had the $Z$, then maximizing the `complete-likelihood'
+$P(X,Z|\Theta)$ would be easy. Therefore, we use a distribution over
+$Z$, denoted $Q(Z)$ and maximize the expected complete-likelihood with
+respect to this distribution:
+\[ E_{Z \sim Q(Z)} \left[ P(X,Z|\Theta) \right] \]
+If we had $Q(Z) = P(Z | X, \Theta)$, then this expectation is the same as our actual objective.
+
+EM is an iterative algorithm. Throughout, we maintain a distribution over the hidden variables $Z$, denoted $q(Z)$.
+
+\section{EM for Gaussian Mixture Model}
+Using a one-of-k representation for the latent variables, the joint distribution is:
+\begin{align*}
+  P(X,Z | \Theta) =& \prod_{n=1}^N P(x_n | z_n, \mu, \Sigma) P(z_n | \pi)\\
+  &= \prod_{n=1}^N \prod_{k=1}^K \left( N(x_n | \mu_k, \Sigma_k) \pi_{k} \right)^{z_{nk}}
+\end{align*}
+The complete log-likelihood is:
+\begin{align*}
+  \log P(X,Z | \Theta) &= \sum_{n=1}^N \sum_{k=1}^K z_{nk} \left( \log \pi_{k} + \log N(x_n | \mu_k, \Sigma_k) \right)
+\end{align*}
+Given a distribution over the $Z$ represented by $\gamma_{nk} = P(z_{nk} = 1 | X, \Theta^{old})$, the expected complete-log-likelihood is:
+\[ Q(\Theta,\Theta^{old}) = \sum_{n=1}^N \sum_{k=1}^K \gamma_{nk} \left( \log \pi_{k} + \log N(x_n | \mu_k, \Sigma_k) \right) \]
+Maximizing this with respect to $\Theta$ gives the following M-step rules:
+
+\section{MAP-EM for GMM}
+
+
+
+\end{document}

@@ -1,0 +1,28 @@
+\documentclass[11pt]{article}
+\usepackage{geometry}                % See geometry.pdf to learn the layout options. There are lots.
+\geometry{letterpaper}                   % ... or a4paper or a5paper or ... 
+\usepackage{graphicx}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{subfig}
+\usepackage{epstopdf}
+\usepackage{bbm}
+\usepackage{algpseudocode}
+\usepackage{algorithm}
+\usepackage{float}
+\DeclareGraphicsRule{.tif}{png}{.png}{`convert #1 `dirname #1`/`basename #1 .tif`.png}
+\newcommand{\R}{\mathbf{R}}
+\newcommand{\KL}[2]{\mathbb{KL}\left(#1||#2\right)}
+\newcommand{\mb}[1]{\mathbf{#1}}
+\newcommand{\KL}[2]{\mathbb{KL}\left(#1||#2\right)}
+
+\title{Mean Field}
+\author{Marco Cusumano-Towner}
+
+\begin{document}
+Suppose we have some unnormalized distributon $\tilde{P}(x)$ that we
+wish to approximate with a distribution $q(x) = \prod_i q_i(x_i)$. We will find the fully factorized $q$ that minimizes the KL-divergence $\KL{q}{p}$. 
+
+
+
+\end{document}

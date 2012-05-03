@@ -1,0 +1,94 @@
+\documentclass[11pt]{article}
+\usepackage{geometry}                % See geometry.pdf to learn the layout options. There are lots.
+\geometry{letterpaper}                   % ... or a4paper or a5paper or ... 
+\usepackage{graphicx}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{subfig}
+\usepackage{epstopdf}
+\usepackage{bbm}
+\usepackage{algpseudocode}
+\usepackage{algorithm}
+\usepackage{float}
+\DeclareGraphicsRule{.tif}{png}{.png}{`convert #1 `dirname #1`/`basename #1 .tif`.png}
+\newcommand{\R}{\mathbf{R}}
+\newcommand{\KL}[2]{\mathbb{KL}\left(#1||#2\right)}
+\newcommand{\mb}[1]{\mathbf{#1}}
+
+\title{CS 228T: HW 3}
+\author{Marco Cusumano-Towner}
+
+\begin{document}
+
+\maketitle
+
+\section{Forwards vs reverse KL divergence}
+The forwards KL between $p(x,y)$ and $q(x,y)=q(x)q(y)$ is given by:
+\begin{align*}
+  \KL{p(x,y)}{q(x)q(y)} &= \sum_x \sum_y p(x,y) \log \frac{p(x,y)}{q(x)q(y)}\\
+  &= \sum_x \sum_y p(x,y) \log p(x,y)  - \sum_x \sum_y p(x,y) \log q(x) - \sum_x \sum_y p(x,y) \log q(y)\\
+  &= \mbox{const.} - \sum_x \sum_y p(x) p(y|x) \log q(x) - \sum_x \sum_y p(y) p(x | y) \log q(y)\\
+  &= \mbox{const.} - \sum_x p(x) \log q(x) - \sum_y p(y) \log q(y)\\
+  &= \mbox{const.} - H(p(x)) +  \KL{p(x)}{q(x)} - H(p(y)) +  \KL{p(y)}{q(y)}\\
+  &= \mbox{const.} + \KL{p(x)}{q(x)} + \KL{p(y)}{q(y)}
+\end{align*}
+where $H(p)$ is the entropy $-\sum_x p(x) \log p(x)$. Therefore, minimizing the total KL divergence is achieved by matching the marginals: $q(x) = p(x)$ and $q(y) = p(y)$.\\ 
+
+\noindent In order for the $\KL{q}{p}$ to be bounded, we require that every $x,y$ where $p(x,y) = 0$ has $q(x)q(y) = 0$.  This captures the zero-forcing behavior of the $\KL{q}{p}$. There are three ways to do this and still result in a valid $q(x)$ and $q(y)$:
+\begin{enumerate}
+  \item $q(x) = q(y) = (q_x \; 1-q_x \; 0 \; 0)$
+  \item $q(x) = q(y) = (0 \; 0 \; 1 \; 0)$
+  \item $q(x) = q(y) = (0 \; 0 \; 0 \; 1)$
+\end{enumerate}
+The best acheiveable KL with the first structure uses $q_x = 0.5$, and gives KL value $\log 2$. The 2nd and 3rd also give KL $\log 2$. If we set $q(x) = p(x)$ and $q(y) = p(y)$ (both uniform), then there will be terms of the form $\log \frac{1/16}{0}$ for each $x,y$ with $p(x,y) = 0$, and the KL will go to $\infty$.
+
+\section{Structured Variational Methods}
+We start with the figure in 11.17a, in which $Q$ is represented by pairwise marginals $\psi_{ij}$ for $i=1,\ldots,4$ and $j=1,\ldots,3$. First, we apply the factorization theorem (KF 11.13) to see if we can get away with simpler updates. In particular, the theorem tells us that each $\psi_{ij}(x_{ij},x_{ij+1})$ will factor into the fully contained $\phi$ and the interfaces with other $\phi$ or $\psi$. In this case, the horizontal $\phi^{-}_{ij}(x_{ij},x_{ij+1})$ is fully contained in $\psi_{ij}$. The interfaces with the vertical $\phi^{|}(x_{i-1,k},x_{ik})$ and $\phi^{|}(x_{ik},x_{i+1,k})$ for $k=1,\ldots,4$ is either $x_{ij}$ or $x_{i,j+1}$. The interfaces with the other $\psi_{ik}$ for $k=1,\ldots,3$ are also these singletons. Therefore, the $\psi_{ij}(x_{ij},x_{i,j+1})$ factors according to:
+\[ \psi_{ij}(x_{ij},x_{i,j+1}) = \phi^{-}_{ij}(x_{ij},x_{i,j+1}) \psi'_{ij}(x_{ij}) \psi'_{i,j+1}(x_{i,j+1})\]
+Therefore, we only need to update each $\psi'_{ij}(x_{ij})$. The $\phi^{-}_{ij}$ cancel and the simplified update is (ignoring edge cases where one of the two listed $\phi^{|}$ doesn't exist):
+\[ \psi'_{ij}(x_{ij}) \propto \exp \left\{ E_Q\left[ \sum_{k=1}^N \ln \phi^{|}_{i-1,k}(x_{i-1,k},x_{ik}) + \ln \phi^{|}_{i,k}(x_{ik},x_{i+1,k}) \right] - E_Q\left[\sum_{k \ne j}^N \ln \psi'_{ik}(x_{ik}) \right] \right\} \]
+For the terms involving the vertical $\phi^{|}_{ij}(x_{ij},x_{i+1,})$, we note that the two variables are independent in $Q$. Therefore, we only need the singleton marginals $Q(x_{ij})$ (for the rows above and below the row we are updating). For the $\psi'_{ij}(x_{ij})$ terms, we need the singleton marginals of all $x_{ij}$ in the same row we are updating.
+
+We can cache the these marginals when we compute them. For example, when we are updating a $\psi'_{ij}$ in row $i$, we can just use the cached $Q(x_{i-1,k})$, and $Q(x_{i+1,k})$ marginals from the rows above and below, and just run the clique-tree algorithm in row $i$. We still need to do clique-tree inference in row $i$,  since the setting of the $x_{ij},x_{i,j+1}$ in $\psi'_{ij}$ during the update (which corresponds to reducing the potential $\psi'_{ij}$ to the setting $x_{ij},x_{i,j+1}$) can change the marginals in this row.
+
+Second, you can cache the clique messages themselves within a row, and only recompute them when required. Suppose $\psi'_{ij}(x_{ij})$ is being updated. First, you don't need to compute the messages coming towards $\psi'_{ij}$ for each setting of $x_{ij}$, these don't change (you still need to compute the messages coming from $\psi'_{ij}$ however). Additionally, suppose we only update potentials in a row in back-and-forth order $1,2,3,4,3,2,1,2,3,4,3,2,1,...$ (we can update potentials in other rows interspersed in between, just the order for any given row must be fixed). If we follow this ordering, we can re-use all the messages coming towards the potential being updated (we will still have to compute all the messages emanating from the node being updated). This will reduce the number of messages computed by 1/2. If we use a bad ordering, then we would have to recompute all the messages.
+
+
+%Say you are updating a potential $\psi_{ij}$ in row $i$. We will need the singleton marginals of the variables in the rows $i-1$ and $i+1$.
+
+
+%We need to compute the marginals $Q(x_{ij},x_{kl} | x_{st},x_{uv} )$ for all $(x_{st},x_{uv})$ that correspond to a potential $\psi(x_{st},x_{uv})$ in $Q$ (the potential we are trying to update), and for all $(x_{ij},x_{kl})$ that correspond to a potential in either $\tilde{P}$ or in $Q$, which is not independent on the $x_{st},x_{uv}$. Naively, for each potential $\psi(x_{st},x_{uv})$ we are trying to update, and for each setting of the $x_{st},x_{uv}$ we would run the whole clique tree message passing scheme to obtain all the desired marginals. Note however, that all the upstream messages (messages being sent in the direction of the $\psi(x_{st},x_{uv})$ will always be the same (since there is no other evidence besides $x_{st},x_{uv}$ anywhere else). Therefore, we can run the clique tree message passing once with no evidence instantiated, and cache all the messages. Then when we are given a query, we reuse all the messages coming into our evidence node. We still have to send new messages downstream from the evidence clique.
+
+%TODO: this doesn't work once a clique potential has been changed. To make this work, we cache the *most recently* sent message from each clique (once its used as evidence). Then later on, these messages can be reused when some other variable is being queried.
+
+\section{Cluster variational methods}
+The original joint distribution for the DBN can be written
+\[ P(x) = \prod_{i=1}^m p(x_i^{(0)}) \prod_{t=1}^T p(x_i^{(t)} | x_{pa_i}^{(t)}, x_i^{(t-1)})\]
+where $x_{pa_i}^{(t)}$ are the parents of $x_i^{(t)}$ in the tree of time slice $t$ (each of these parents is from a different chain $j$). After some evidence is observed, we use the evidence to reduce the CPT's to un-normalized factors, and the un-normalized distribution becomes
+\[ \tilde{P}(x) = \prod_{i=1}^m \phi_{i0}(x_i^{(0)}) \prod_{t=1}^T \phi_{it}(x_i^{(t)}, x_{pa_i}^{(t)}, x_i^{(t-1)})  \]
+(a) Cluster for each chain:\\
+Suppose $i = 1$ is the root of the tree. Treating each chain $(x_i^{(0)},\ldots,x_i^{(T)})$ as a cluster, the Factorization theorem (11.13 from KF) tells us that the factor $\psi_i$ for this cluster will factorize into (i) the set of $\phi$'s that are fully contained in $\psi_i$, and (ii) the sets of interface variables with other factors $\phi$ and $\psi_j$. For the fully contained factors, for $i = 1$ (the root of the tree), all the $\phi_{1t} : t \ge 0$ are fully contained. For $i > 1$, only $\phi_{i0}$ is fully contained. Since the $\psi_j$ for each chain are completely separated, no there are no factors for the interface variabels with other clusters. The other $\phi$ involved are the factors corresponding to the CPT of each $x_i^{(t)}$ ($\phi_{it}$ for $t \ge 1$) and the factors corresponding to the CPT's of the children ($\phi_{jt}$ for $j \in ch_i$ and $t \ge 1$). For $i = 1$, the CPT's of the $x_1^{(t)}$ have already been included (the $\phi_{1t}$ are fully contained), and only the children factors are involved. For $\psi_i$, the interface sets to the $\phi_{it}$ involve the pair of variables $(x_i^{(t)},x_i^{(t-1)})$, and the interface sets to the children CPT's ($\phi_{jt}$) only include the one variable $x_i^{(t)}$. Therefore, we can reduce the set of factors for $\psi_i$ to a set of pairwise factors $\psi_{it}(x_i^{(t)}, x_i^{(t-1)}) : t \ge 1$:
+\[ \psi_i \propto \prod_{t=1}^T \psi'_{it}(x_i^{(t-1)},x_i^{(t)}) \implies Q(x) \propto \prod_{i=1}^m \prod_{t=1}^T  \psi'_{it}(x_i^{(t-1)},x_i^{(t)}) \]
+For the update equations for each potential $\psi_{it}(x_i^{(t)}, x_i^{(t-1)}))$, we determine the other potentials $\phi$ and $\psi$ that are not independent of the variables $x_i^{(t)}$ and $x_i^{(t-1)}$ under $Q$. Specifically, any potential involving variables in the $i$ chain will remain. For the $\phi$, this consists of all $\phi_{is}$ potentials for $s = 0,\ldots,T$ as well as the $\phi_{js}$ potentials for all $j \in ch_i$ (the children of $i$) and $s = 1,\ldots,T$. For the $\psi$, this consists only of the $\psi'_{is}$ for all times $s$:
+
+\begin{align*}
+  \psi'_{it}(x_i^{(t)},x_i^{(t-1)}) \propto \exp \{ E_Q[ & \ln \psi{i0}(x_i^{(0)}) + \sum_{s=1}^T \ln \phi_{is}(x_i^{(s)},x_i^{(s-1)}, x_{pa_i}^{(s)}) + \sum_{s=1}^T \sum_{j \in ch_{i}}  \ln \phi_{js}(x_j^{(s)},x_j^{(s-1)},x_{pa_j}^{(s)}) \\
+    & - \sum_{s=1}^T E_Q[\ln \psi_{is}(x_i^{(s)},x_i^{(s-1)})] \}
+\end{align*}
+
+% Since we are working with trees, each node has one parent, so all the potentials have three variables (except for the $t=0$ potentials, which has 1). Furthermore, two of the variables are from within the same chain, and one (the parent) is from a separate chain. %To compute these expectations, we therefore need probabilities of the form $q_j(x_j^{(s)}, x_j^{(s-1)})$ as well as individual marginals $q_j(x^{(s)})$. These are obtained by calibrating the clique chains for each chain $q_j$.\\
+
+\noindent (b) Cluster for each tree:\\
+If we use a cluster for each time slice tree, then we have a potential $\psi_t$ for each time slice tree. Again using the factorization theorem, we decompose this into smaller factors: (i) there are no fully contained $\phi$ factors. (ii) for other $\phi$, we have all the $\phi_{it}(x_i^{(t)},x_i^{(t-1)}, x_{pa_i}^{(t)})$, and these each have interface variables $(x_i^{(t)}, x_{pa_i}^{(t)}))$. We also have the $\phi_{i,t+1}(x_i^{(t+1)}, x_i^{(t)}, x_{pa_i}^{(t+1)})$, with interface variable $x_i^{(t)}$. As before, there are no dependent other $\psi_s$ for other times $s$, since the clusters are disconnected in $Q$. Therefore, absorbing the singleton factors and the pairwise $\phi$ into pairwise factors $\psi'_{it}$, we have
+$\psi_{t} \propto \prod_{i=1}^m \psi'_{it}(x_i^{(t)}, x_{pa_i}^{(t)})$, where we have $pa_0 = \{ \}$.
+When updating a given $\psi'_{it}$, all factors $\phi_{jt}$ and  $\phi_{j,t+1}$ are involved, as well as all the other $\psi'_{jt}$ (all for all $j$), since these involve variables that are dependent on the $(x_i^{(t)}, x_{pa_i}^{(t)})$ under $Q$:
+\begin{align*}
+ \psi'_{it}(x_i^{(t)},x_{pa_i}^{(t)}) \propto \exp \{ E_Q[ & \sum_{j=1}^m \ln \phi_{jt}(x_j^{(t)},x_{pa_j}^{(t)}) + \ln \phi_{j,t+1}(x_j^{(t+1)},x_{pa_j}^{(t+1)},x_j^{(t)}) \\
+  & - \sum_{j\ne i}^m \ln \psi'_{jt}(x_j^{(t)},x_{pa_j}^{(t)})) ] \}
+\end{align*}
+
+\section{Programming: Gaussian Mixture Models}
+See code. My collapsed gibbs is a little slow, and my initialization for gibbs and collapsedGibbs takes a while (just runs initializeMus, but with 5x more samples). This is because the initialization was sometimes bad and caused failures.
+
+
+\end{document}
